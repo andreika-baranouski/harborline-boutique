@@ -1,3 +1,7 @@
+# Harborline storefront platform
+
+This is Harborline's fork of Google's Online Boutique (microservices-demo); the upstream README, with its original notices, follows unchanged below.
+
 <!-- <p align="center">
 <img src="/src/frontend/static/icons/Hipster_HeroLogoMaroon.svg" width="300" alt="Online Boutique" />
 </p> -->
