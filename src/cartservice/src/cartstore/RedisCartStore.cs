@@ -48,13 +48,14 @@ namespace cartservice.cartstore
                 {
                     cart = Hipstershop.Cart.Parser.ParseFrom(value);
                     var existingItem = cart.Items.SingleOrDefault(i => i.ProductId == productId);
+                    var mergedQuantity = quantity + (existingItem?.Quantity ?? 0);
                     if (existingItem == null)
                     {
-                        cart.Items.Add(new Hipstershop.CartItem { ProductId = productId, Quantity = quantity });
+                        cart.Items.Add(new Hipstershop.CartItem { ProductId = productId, Quantity = mergedQuantity });
                     }
                     else
                     {
-                        existingItem.Quantity += quantity;
+                        existingItem.Quantity += mergedQuantity;
                     }
                 }
                 await _cache.SetAsync(userId, cart.ToByteArray());
