@@ -125,7 +125,7 @@ func (s *server) GetQuote(ctx context.Context, in *pb.GetQuoteRequest) (*pb.GetQ
 	for _, item := range in.Items {
 		count += int(item.Quantity)
 	}
-	quote := CreateQuoteFromCount(count)
+	quote := CreateQuoteFromCount(count, in.GetAddress().GetCountry())
 
 	// 2. Generate a response.
 	return &pb.GetQuoteResponse{

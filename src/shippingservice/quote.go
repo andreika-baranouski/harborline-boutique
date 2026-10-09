@@ -30,12 +30,19 @@ func (q Quote) String() string {
 	return fmt.Sprintf("$%d.%d", q.Dollars, q.Cents)
 }
 
-// CreateQuoteFromCount takes a number of items and returns a shipping quote.
-func CreateQuoteFromCount(count int) Quote {
+// regionalRates is the flat per-shipment rate by destination country.
+var regionalRates = map[string]float64{
+	"US":            8.99,
+	"USA":           8.99,
+	"United States": 8.99,
+}
+
+// CreateQuoteFromCount takes a number of items and the destination country and returns a shipping quote.
+func CreateQuoteFromCount(count int, country string) Quote {
 	if count == 0 {
 		return CreateQuoteFromFloat(0)
 	}
-	return CreateQuoteFromFloat(8.99)
+	return CreateQuoteFromFloat(regionalRates[country])
 }
 
 // CreateQuoteFromFloat takes a price represented as a float and creates a Price struct.

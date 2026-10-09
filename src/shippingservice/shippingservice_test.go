@@ -164,12 +164,12 @@ func TestCreateQuoteFromFloat(t *testing.T) {
 
 // TestCreateQuoteFromCount verifies count-based quote generation.
 func TestCreateQuoteFromCount(t *testing.T) {
-	zeroQuote := CreateQuoteFromCount(0)
+	zeroQuote := CreateQuoteFromCount(0, "US")
 	if zeroQuote.Dollars != 0 || zeroQuote.Cents != 0 {
 		t.Errorf("CreateQuoteFromCount(0) = %s, want $0.0", zeroQuote)
 	}
 
-	nonZeroQuote := CreateQuoteFromCount(5)
+	nonZeroQuote := CreateQuoteFromCount(5, "US")
 	if nonZeroQuote.Dollars == 0 && nonZeroQuote.Cents == 0 {
 		t.Error("CreateQuoteFromCount(5) returned zero, expected a non-zero quote")
 	}
