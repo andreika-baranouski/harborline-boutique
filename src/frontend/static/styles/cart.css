@@ -50,6 +50,10 @@
 
 /*  Cart Summary Section */
 
+.cart-summary-section {
+    min-width: 560px;
+}
+
 .cart-summary-empty-cart-button {
     margin-right: 10px;
 }
@@ -60,6 +64,10 @@
     padding-bottom: 24px;
     padding-top: 24px;
     border-top: solid 1px rgba(154, 160, 166, 0.5);
+}
+
+.cart-summary-item-row {
+    flex-wrap: nowrap;
 }
 
 .cart-summary-item-row img {
