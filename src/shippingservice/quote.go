@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strings"
 )
 
 // Quote represents a currency value.
@@ -30,11 +31,30 @@ func (q Quote) String() string {
 	return fmt.Sprintf("$%d.%d", q.Dollars, q.Cents)
 }
 
-// regionalRates is the flat per-shipment rate by destination country.
+// defaultRate is the flat per-shipment rate for destinations without a regional rate.
+const defaultRate = 8.99
+
+// regionalRates overrides defaultRate for specific destination countries,
+// keyed by the normalized country (see normalizeCountry).
 var regionalRates = map[string]float64{
-	"US":            8.99,
-	"USA":           8.99,
-	"United States": 8.99,
+	"US": 8.99,
+}
+
+// countryAliases maps the ways customers type a country (upper-cased) to its regionalRates key.
+var countryAliases = map[string]string{
+	"USA":                      "US",
+	"U.S.":                     "US",
+	"UNITED STATES":            "US",
+	"UNITED STATES OF AMERICA": "US",
+}
+
+// normalizeCountry trims and upper-cases a free-text country and resolves known aliases.
+func normalizeCountry(country string) string {
+	c := strings.ToUpper(strings.TrimSpace(country))
+	if alias, ok := countryAliases[c]; ok {
+		return alias
+	}
+	return c
 }
 
 // CreateQuoteFromCount takes a number of items and the destination country and returns a shipping quote.
@@ -42,7 +62,11 @@ func CreateQuoteFromCount(count int, country string) Quote {
 	if count == 0 {
 		return CreateQuoteFromFloat(0)
 	}
-	return CreateQuoteFromFloat(regionalRates[country])
+	rate, ok := regionalRates[normalizeCountry(country)]
+	if !ok {
+		rate = defaultRate
+	}
+	return CreateQuoteFromFloat(rate)
 }
 
 // CreateQuoteFromFloat takes a price represented as a float and creates a Price struct.

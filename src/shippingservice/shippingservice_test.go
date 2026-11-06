@@ -175,6 +175,77 @@ func TestCreateQuoteFromCount(t *testing.T) {
 	}
 }
 
+// TestCreateQuoteFromCountDefaultRate verifies that destinations without a
+// regional rate (including an empty country) get the default rate.
+func TestCreateQuoteFromCountDefaultRate(t *testing.T) {
+	for _, country := range []string{"US", "DE", "Germany", "Canada", "England", ""} {
+		q := CreateQuoteFromCount(1, country)
+		if q.Dollars != 8 || q.Cents != 99 {
+			t.Errorf("CreateQuoteFromCount(1, %q) = %s, want $8.99", country, q)
+		}
+	}
+}
+
+// TestNormalizeCountry verifies that free-text countries are trimmed, upper-cased and de-aliased.
+func TestNormalizeCountry(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"US", "US"},
+		{"us", "US"},
+		{"  US ", "US"},
+		{"USA", "US"},
+		{"usa", "US"},
+		{"U.S.", "US"},
+		{"u.s.", "US"},
+		{"United States", "US"},
+		{"united states", "US"},
+		{" United States of America ", "US"},
+		{"Germany", "GERMANY"},
+		{" de ", "DE"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := normalizeCountry(tc.in); got != tc.want {
+			t.Errorf("normalizeCountry(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestCreateQuoteFromCountRegionalRateVariants verifies that a regional rate
+// applies to every way customers type the country, and others get the default.
+func TestCreateQuoteFromCountRegionalRateVariants(t *testing.T) {
+	orig := regionalRates["US"]
+	regionalRates["US"] = 5.49
+	defer func() { regionalRates["US"] = orig }()
+
+	for _, country := range []string{"US", "us", " US ", "USA", "U.S.", "United States", "united states", "United States of America"} {
+		if q := CreateQuoteFromCount(1, country); q.Dollars != 5 || q.Cents != 49 {
+			t.Errorf("CreateQuoteFromCount(1, %q) = %s, want $5.49", country, q)
+		}
+	}
+	for _, country := range []string{"DE", "Germany", "", "U.S.A"} {
+		if q := CreateQuoteFromCount(1, country); q.Dollars != 8 || q.Cents != 99 {
+			t.Errorf("CreateQuoteFromCount(1, %q) = %s, want $8.99", country, q)
+		}
+	}
+}
+
+// TestGetQuoteNoAddress verifies that a request without an address gets the default rate.
+func TestGetQuoteNoAddress(t *testing.T) {
+	s := server{}
+	req := &pb.GetQuoteRequest{
+		Items: []*pb.CartItem{{ProductId: "23", Quantity: 1}},
+	}
+	res, err := s.GetQuote(context.Background(), req)
+	if err != nil {
+		t.Fatalf("TestGetQuoteNoAddress (%v) failed", err)
+	}
+	if res.CostUsd.GetUnits() != 8 || res.CostUsd.GetNanos() != 990000000 {
+		t.Errorf("TestGetQuoteNoAddress: Quote value '%d.%d' does not match expected '8.990000000'", res.CostUsd.GetUnits(), res.CostUsd.GetNanos())
+	}
+}
+
 // TestGetRandomLetterCode verifies the output is a valid uppercase letter.
 func TestGetRandomLetterCode(t *testing.T) {
 	for i := 0; i < 100; i++ {
