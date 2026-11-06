@@ -33,6 +33,7 @@ import (
 
 	pb "github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/genproto"
 	money "github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/money"
+	"github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/promo"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -83,6 +84,9 @@ type checkoutService struct {
 
 	paymentSvcAddr string
 	paymentSvcConn *grpc.ClientConn
+
+	promos promo.Table
+	now    func() time.Time
 }
 
 func main() {
@@ -114,6 +118,15 @@ func main() {
 	mustMapEnv(&svc.currencySvcAddr, "CURRENCY_SERVICE_ADDR")
 	mustMapEnv(&svc.emailSvcAddr, "EMAIL_SERVICE_ADDR")
 	mustMapEnv(&svc.paymentSvcAddr, "PAYMENT_SERVICE_ADDR")
+
+	// PROMO_CODES is optional; a bad table never stops the service.
+	var promoErrs []error
+	svc.promos, promoErrs = promo.Parse(os.Getenv("PROMO_CODES"))
+	for _, err := range promoErrs {
+		log.Error(err)
+	}
+	log.Infof("promo codes loaded: %v", svc.promos.Codes())
+	svc.now = time.Now
 
 	mustConnGRPC(ctx, &svc.shippingSvcConn, svc.shippingSvcAddr)
 	mustConnGRPC(ctx, &svc.productCatalogSvcConn, svc.productCatalogSvcAddr)
@@ -237,16 +250,16 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 
 	prep, err := cs.prepareOrderItemsAndShippingQuoteFromCart(ctx, req.UserId, req.UserCurrency, req.Address)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	total := pb.Money{CurrencyCode: req.UserCurrency,
-		Units: 0,
-		Nanos: 0}
-	total = money.Must(money.Sum(total, *prep.shippingCostLocalized))
-	for _, it := range prep.orderItems {
-		multPrice := money.MultiplySlow(*it.Cost, uint32(it.GetItem().GetQuantity()))
-		total = money.Must(money.Sum(total, multPrice))
+	var promoRes *pb.PromoResult
+	if promo.Normalize(req.GetPromoCode()) != "" {
+		promoRes = cs.promos.Evaluate(req.GetPromoCode(), cs.now())
+	}
+	total, discount := computeTotals(req.UserCurrency, prep.orderItems, *prep.shippingCostLocalized, promoRes)
+	if promoRes.GetStatus() == pb.PromoResult_APPLIED {
+		promoRes.Discount = &discount
 	}
 
 	txID, err := cs.chargeCard(ctx, &total, req.CreditCard)
@@ -268,6 +281,16 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 		ShippingCost:       prep.shippingCostLocalized,
 		ShippingAddress:    req.Address,
 		Items:              prep.orderItems,
+		TotalPaid:          &total,
+		Promo:              promoRes,
+	}
+	if promoRes != nil {
+		log.WithFields(logrus.Fields{
+			"order_id":     orderResult.OrderId,
+			"promo_code":   promoRes.GetCode(),
+			"promo_status": promoRes.GetStatus().String(),
+			"discount":     fmt.Sprintf("%d.%09d %s", discount.GetUnits(), discount.GetNanos(), discount.GetCurrencyCode()),
+		}).Info("promo code evaluated")
 	}
 
 	if err := cs.sendOrderConfirmation(ctx, req.Email, orderResult); err != nil {
@@ -277,6 +300,24 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 	}
 	resp := &pb.PlaceOrderResponse{Order: orderResult}
 	return resp, nil
+}
+
+// computeTotals returns the amount to charge (items subtotal - discount +
+// shipping) and the discount, both in currency. The discount is non-zero only
+// for an APPLIED promo and is taken from the items subtotal, never shipping.
+func computeTotals(currency string, items []*pb.OrderItem, shipping pb.Money, promoRes *pb.PromoResult) (total pb.Money, discount pb.Money) {
+	subtotal := pb.Money{CurrencyCode: currency}
+	for _, it := range items {
+		multPrice := money.MultiplySlow(*it.Cost, uint32(it.GetItem().GetQuantity()))
+		subtotal = money.Must(money.Sum(subtotal, multPrice))
+	}
+	discount = pb.Money{CurrencyCode: currency}
+	if promoRes.GetStatus() == pb.PromoResult_APPLIED {
+		discount = money.PercentOf(subtotal, promoRes.GetPercent())
+	}
+	total = money.Must(money.Sum(subtotal, money.Negate(discount)))
+	total = money.Must(money.Sum(total, shipping))
+	return total, discount
 }
 
 type orderPrep struct {

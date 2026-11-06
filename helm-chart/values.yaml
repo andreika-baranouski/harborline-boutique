@@ -84,6 +84,10 @@ cartService:
 checkoutService:
   create: true
   name: checkoutservice
+  # Promo code table as JSON, e.g.
+  # '[{"code":"WELCOME10","percent":10},{"code":"HARBOR25","percent":25,"end":"2026-12-31"}]'
+  # Empty = no discounts.
+  promoCodes: ""
   resources:
     requests:
       cpu: 100m

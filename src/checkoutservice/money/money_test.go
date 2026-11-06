@@ -243,3 +243,33 @@ func TestSum(t *testing.T) {
 		})
 	}
 }
+
+func TestPercentOf(t *testing.T) {
+	tests := []struct {
+		name string
+		in   pb.Money
+		pct  uint32
+		want pb.Money
+	}{
+		{"19.99 USD x 10%", mmc(19, 990000000, "USD"), 10, mmc(2, 0, "USD")},
+		{"19.99 USD x 25% (4.9975 rounds up)", mmc(19, 990000000, "USD"), 25, mmc(5, 0, "USD")},
+		{"0.01 x 10% rounds down", mmc(0, 10000000, "USD"), 10, mmc(0, 0, "USD")},
+		{"exact half rounds up", mmc(0, 50000000, "USD"), 10, mmc(0, 10000000, "USD")},
+		{"1000 JPY x 25%", mmc(1000, 0, "JPY"), 25, mmc(250, 0, "JPY")},
+		{"1234 JPY x 25% rounds to whole yen", mmc(1234, 0, "JPY"), 25, mmc(309, 0, "JPY")},
+		{"sub-cent nanos 18.393 EUR x 10%", mmc(18, 393000000, "EUR"), 10, mmc(1, 840000000, "EUR")},
+		{"pct 0", mmc(19, 990000000, "USD"), 0, mmc(0, 0, "USD")},
+		{"pct 100 rounds amount", mmc(18, 393000000, "EUR"), 100, mmc(18, 390000000, "EUR")},
+		{"large units no overflow", mmc(9000000000000000000, 0, "USD"), 50, mmc(4500000000000000000, 0, "USD")},
+		{"negative rounds away from zero", mmc(-19, -990000000, "USD"), 10, mmc(-2, 0, "USD")},
+		{"no currency uses 2 decimals", mm(1, 5000000), 100, mm(1, 10000000)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PercentOf(tt.in, tt.pct)
+			if !AreEquals(got, tt.want) {
+				t.Errorf("PercentOf(%v, %d) = %v, want %v", tt.in, tt.pct, got, tt.want)
+			}
+		})
+	}
+}

@@ -66,6 +66,10 @@ spec:
             value: "currencyservice:7000"
           - name: CART_SERVICE_ADDR
             value: "cartservice:7070"
+          # Promo code table (JSON): code, percent 1-100, optional inclusive UTC
+          # start/end dates (YYYY-MM-DD). Unset or empty = no discounts.
+          - name: PROMO_CODES
+            value: '[{"code":"WELCOME10","percent":10},{"code":"HARBOR25","percent":25,"end":"2026-12-31"}]'
           resources:
             requests:
               cpu: 100m
