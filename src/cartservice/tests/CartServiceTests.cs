@@ -113,6 +113,49 @@ namespace cartservice.tests
             await client.EmptyCartAsync(new EmptyCartRequest { UserId = userId });
         }
 
+        [Theory]
+        [InlineData(new[] { 1, 1, 1 }, 3)]
+        [InlineData(new[] { 1, 1, 1, 1 }, 4)]
+        [InlineData(new[] { 2, 3 }, 5)]
+        [InlineData(new[] { 2, 3, 4 }, 9)]
+        public async Task AddItem_ItemExists_QuantityIsSumOfAdds(int[] quantities, int expectedQuantity)
+        {
+            // Setup test server and client
+            using var server = await _host.StartAsync();
+            var httpClient = server.GetTestClient();
+
+            string userId = Guid.NewGuid().ToString();
+
+            // Create a GRPC communication channel between the client and the server
+            var channel = GrpcChannel.ForAddress(httpClient.BaseAddress, new GrpcChannelOptions
+            {
+                HttpClient = httpClient
+            });
+
+            var client = new CartServiceClient(channel);
+
+            foreach (var quantity in quantities)
+            {
+                await client.AddItemAsync(new AddItemRequest
+                {
+                    UserId = userId,
+                    Item = new CartItem
+                    {
+                        ProductId = "1",
+                        Quantity = quantity
+                    }
+                });
+            }
+
+            var cart = await client.GetCartAsync(new GetCartRequest { UserId = userId });
+            Assert.NotNull(cart);
+            Assert.Single(cart.Items);
+            Assert.Equal(expectedQuantity, cart.Items[0].Quantity);
+
+            // Cleanup
+            await client.EmptyCartAsync(new EmptyCartRequest { UserId = userId });
+        }
+
         [Fact]
         public async Task AddItem_New_Inserted()
         {

@@ -55,7 +55,7 @@ namespace cartservice.cartstore
                     }
                     else
                     {
-                        existingItem.Quantity += mergedQuantity;
+                        existingItem.Quantity = mergedQuantity;
                     }
                 }
                 await _cache.SetAsync(userId, cart.ToByteArray());
