@@ -175,6 +175,32 @@ func TestCreateQuoteFromCount(t *testing.T) {
 	}
 }
 
+// TestCreateQuoteFromCountDefaultRate verifies that destinations without a
+// regional rate (including an empty country) get the default rate.
+func TestCreateQuoteFromCountDefaultRate(t *testing.T) {
+	for _, country := range []string{"US", "DE", "Germany", "Canada", "England", ""} {
+		q := CreateQuoteFromCount(1, country)
+		if q.Dollars != 8 || q.Cents != 99 {
+			t.Errorf("CreateQuoteFromCount(1, %q) = %s, want $8.99", country, q)
+		}
+	}
+}
+
+// TestGetQuoteNoAddress verifies that a request without an address gets the default rate.
+func TestGetQuoteNoAddress(t *testing.T) {
+	s := server{}
+	req := &pb.GetQuoteRequest{
+		Items: []*pb.CartItem{{ProductId: "23", Quantity: 1}},
+	}
+	res, err := s.GetQuote(context.Background(), req)
+	if err != nil {
+		t.Fatalf("TestGetQuoteNoAddress (%v) failed", err)
+	}
+	if res.CostUsd.GetUnits() != 8 || res.CostUsd.GetNanos() != 990000000 {
+		t.Errorf("TestGetQuoteNoAddress: Quote value '%d.%d' does not match expected '8.990000000'", res.CostUsd.GetUnits(), res.CostUsd.GetNanos())
+	}
+}
+
 // TestGetRandomLetterCode verifies the output is a valid uppercase letter.
 func TestGetRandomLetterCode(t *testing.T) {
 	for i := 0; i < 100; i++ {

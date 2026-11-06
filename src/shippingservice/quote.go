@@ -30,7 +30,10 @@ func (q Quote) String() string {
 	return fmt.Sprintf("$%d.%d", q.Dollars, q.Cents)
 }
 
-// regionalRates is the flat per-shipment rate by destination country.
+// defaultRate is the flat per-shipment rate for destinations without a regional rate.
+const defaultRate = 8.99
+
+// regionalRates overrides defaultRate for specific destination countries.
 var regionalRates = map[string]float64{
 	"US":            8.99,
 	"USA":           8.99,
@@ -42,7 +45,11 @@ func CreateQuoteFromCount(count int, country string) Quote {
 	if count == 0 {
 		return CreateQuoteFromFloat(0)
 	}
-	return CreateQuoteFromFloat(regionalRates[country])
+	rate, ok := regionalRates[country]
+	if !ok {
+		rate = defaultRate
+	}
+	return CreateQuoteFromFloat(rate)
 }
 
 // CreateQuoteFromFloat takes a price represented as a float and creates a Price struct.
