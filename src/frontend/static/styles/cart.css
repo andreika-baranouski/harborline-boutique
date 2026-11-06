@@ -50,10 +50,6 @@
 
 /*  Cart Summary Section */
 
-.cart-summary-section {
-    min-width: 560px;
-}
-
 .cart-summary-empty-cart-button {
     margin-right: 10px;
 }
@@ -66,8 +62,15 @@
     border-top: solid 1px rgba(154, 160, 166, 0.5);
 }
 
-.cart-summary-item-row {
-    flex-wrap: nowrap;
+/* Keep the summary from wrapping on tablets and up; stack it below 768px. */
+@media (min-width: 768px) {
+    .cart-summary-section {
+        min-width: 560px;
+    }
+
+    .cart-summary-item-row {
+        flex-wrap: nowrap;
+    }
 }
 
 .cart-summary-item-row img {
