@@ -21,7 +21,7 @@ import sys
 import time
 import grpc
 import traceback
-from jinja2 import Environment, FileSystemLoader, select_autoescape, TemplateError
+from jinja2 import Environment, FileSystemLoader, select_autoescape, StrictUndefined, TemplateError
 from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import DefaultCredentialsError
 
@@ -42,10 +42,13 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from logger import getJSONLogger
 logger = getJSONLogger('emailservice-server')
 
-# Loads confirmation email template from file
+# Loads confirmation email template from file.
+# StrictUndefined makes a field missing from the order fail the render
+# instead of silently producing an empty string.
 env = Environment(
     loader=FileSystemLoader('templates'),
-    autoescape=select_autoescape(['html', 'xml'])
+    autoescape=select_autoescape(['html', 'xml']),
+    undefined=StrictUndefined
 )
 template = env.get_template('confirmation.html')
 
