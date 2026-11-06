@@ -92,6 +92,9 @@ spec:
           #   value: "true"
           # - name: ENABLE_ASSISTANT
           #   value: "true"
+          # Set to "false" to hide the "You may also like" strip and stop calls to recommendationservice.
+          # - name: ENABLE_RECOMMENDATIONS
+          #   value: "false"
           # - name: FRONTEND_MESSAGE
           #   value: "Replace this with a message you want to display on all pages."
           # As part of an optional Google Cloud demo, you can run an optional microservice called the "packaging service".
