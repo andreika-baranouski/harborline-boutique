@@ -152,10 +152,12 @@ function convert (call, callback) {
       // Convert: EUR --> to_currency
       const rate = data[request.to_code];
       const result = _carry({
-        units: Math.floor(euros.units * rate),
-        nanos: Math.round(euros.nanos * rate)
+        units: euros.units * rate,
+        nanos: euros.nanos * rate
       });
 
+      result.units = Math.floor(result.units);
+      result.nanos = Math.floor(result.nanos);
       result.currency_code = request.to_code;
 
       logger.info(`conversion request successful`);
@@ -194,4 +196,8 @@ function main () {
    );
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = { convert };
