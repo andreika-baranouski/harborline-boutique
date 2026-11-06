@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -88,7 +89,12 @@ func main() {
 		log.Info("Stats disabled.")
 		srv = grpc.NewServer()
 	}
-	svc := &server{}
+	svc := &server{
+		estimatesEnabled: "true" == strings.ToLower(os.Getenv("ENABLE_DELIVERY_ESTIMATE")),
+	}
+	if svc.estimatesEnabled {
+		log.Info("Delivery estimates enabled.")
+	}
 	pb.RegisterShippingServiceServer(srv, svc)
 	healthcheck := health.NewServer()
 	healthpb.RegisterHealthServer(srv, healthcheck)
@@ -104,6 +110,28 @@ func main() {
 // server controls RPC service responses.
 type server struct {
 	pb.UnimplementedShippingServiceServer
+
+	// estimatesEnabled turns on estimated_delivery in GetQuote and ShipOrder (ENABLE_DELIVERY_ESTIMATE).
+	estimatesEnabled bool
+	// now is the clock used for the ship date; nil means time.Now.
+	now func() time.Time
+}
+
+// today returns the current time from the server's clock.
+func (s *server) today() time.Time {
+	if s.now == nil {
+		return time.Now()
+	}
+	return s.now()
+}
+
+// estimate returns the estimated delivery date to country as "YYYY-MM-DD",
+// or "" when delivery estimates are disabled.
+func (s *server) estimate(country string) string {
+	if !s.estimatesEnabled {
+		return ""
+	}
+	return EstimateDelivery(s.today(), country).Format(deliveryDateLayout)
 }
 
 // Check is for health checking.
@@ -133,6 +161,7 @@ func (s *server) GetQuote(ctx context.Context, in *pb.GetQuoteRequest) (*pb.GetQ
 			CurrencyCode: "USD",
 			Units:        int64(quote.Dollars),
 			Nanos:        int32(quote.Cents * 10000000)},
+		EstimatedDelivery: s.estimate(in.GetAddress().GetCountry()),
 	}, nil
 
 }
@@ -148,7 +177,8 @@ func (s *server) ShipOrder(ctx context.Context, in *pb.ShipOrderRequest) (*pb.Sh
 
 	// 2. Generate a response.
 	return &pb.ShipOrderResponse{
-		TrackingId: id,
+		TrackingId:        id,
+		EstimatedDelivery: s.estimate(in.GetAddress().GetCountry()),
 	}, nil
 }
 

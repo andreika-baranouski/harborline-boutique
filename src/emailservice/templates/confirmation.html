@@ -32,6 +32,8 @@
     <p>#{{ order.order_id }}</p>
     <h3>Shipping</h3>
     <p>Tracking #{{ order.shipping_tracking_id }}</p>
+    {% set eta = order.estimated_delivery | delivery_date %}
+    {% if eta %}<p>Estimated delivery: {{ eta }}</p>{% endif %}
     <p>{{ order.shipping_cost.units }}. {{ "%02d" | format(order.shipping_cost.nanos // 10000000) }} {{ order.shipping_cost.currency_code }}</p>
     <p>{{ order.shipping_address.street_address }}, {{order.shipping_address.city}}, {{order.shipping_address.country}} {{order.shipping_address.zip_code}}</p>
     <h3>Items</h3>

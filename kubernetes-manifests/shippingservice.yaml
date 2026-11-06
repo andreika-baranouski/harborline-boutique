@@ -50,6 +50,8 @@ spec:
           value: "50051"
         - name: DISABLE_PROFILER
           value: "1"
+        # - name: ENABLE_DELIVERY_ESTIMATE
+        #   value: "true"
         readinessProbe:
           periodSeconds: 5
           grpc:

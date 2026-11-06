@@ -16,6 +16,7 @@
 
 from concurrent import futures
 import argparse
+import datetime
 import os
 import sys
 import time
@@ -50,6 +51,24 @@ env = Environment(
     autoescape=select_autoescape(['html', 'xml']),
     undefined=StrictUndefined
 )
+
+def format_delivery_date(value, locale='en-US'):
+  """Formats an ISO "YYYY-MM-DD" estimated delivery date for the customer.
+
+  Only en-US is implemented ("Thursday, November 12, 2026"); any other locale
+  falls back to it. Returns '' for an empty or invalid value and never raises,
+  so a bad estimate drops the line instead of failing the confirmation e-mail.
+  """
+  if not value:
+    return ''
+  try:
+    d = datetime.date.fromisoformat(value)
+  except ValueError:
+    logger.warning('invalid estimated delivery date: {!r}'.format(value))
+    return ''
+  return '{:%A}, {:%B} {}, {}'.format(d, d, d.day, d.year)
+
+env.filters['delivery_date'] = format_delivery_date
 template = env.get_template('confirmation.html')
 
 class BaseEmailService(demo_pb2_grpc.EmailServiceServicer):
