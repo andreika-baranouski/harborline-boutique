@@ -268,22 +268,14 @@ func (cs *checkoutService) PlaceOrder(ctx context.Context, req *pb.PlaceOrderReq
 	}
 	log.Infof("payment went through (transaction_id: %s)", txID)
 
-	shippingTrackingID, err := cs.shipOrder(ctx, req.Address, prep.cartItems)
+	shipment, err := cs.shipOrder(ctx, req.Address, prep.cartItems)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "shipping error: %+v", err)
 	}
 
 	_ = cs.emptyUserCart(ctx, req.UserId)
 
-	orderResult := &pb.OrderResult{
-		OrderId:            orderID.String(),
-		ShippingTrackingId: shippingTrackingID,
-		ShippingCost:       prep.shippingCostLocalized,
-		ShippingAddress:    req.Address,
-		Items:              prep.orderItems,
-		TotalPaid:          &total,
-		Promo:              promoRes,
-	}
+	orderResult := newOrderResult(orderID.String(), shipment, prep, req.Address, &total, promoRes)
 	if promoRes != nil {
 		log.WithFields(logrus.Fields{
 			"order_id":     orderResult.OrderId,
@@ -318,6 +310,22 @@ func computeTotals(currency string, items []*pb.OrderItem, shipping pb.Money, pr
 	total = money.Must(money.Sum(subtotal, money.Negate(discount)))
 	total = money.Must(money.Sum(total, shipping))
 	return total, discount
+}
+
+// newOrderResult builds the order returned to the frontend and sent to the e-mail service.
+// The tracking id and estimated delivery date are copied from the shipment unchanged;
+// totalPaid and promoRes are the amount charged and the promo outcome (nil when no code was sent).
+func newOrderResult(orderID string, shipment *pb.ShipOrderResponse, prep orderPrep, address *pb.Address, totalPaid *pb.Money, promoRes *pb.PromoResult) *pb.OrderResult {
+	return &pb.OrderResult{
+		OrderId:            orderID,
+		ShippingTrackingId: shipment.GetTrackingId(),
+		ShippingCost:       prep.shippingCostLocalized,
+		ShippingAddress:    address,
+		Items:              prep.orderItems,
+		TotalPaid:          totalPaid,
+		Promo:              promoRes,
+		EstimatedDelivery:  shipment.GetEstimatedDelivery(),
+	}
 }
 
 type orderPrep struct {
@@ -424,12 +432,12 @@ func (cs *checkoutService) sendOrderConfirmation(ctx context.Context, email stri
 	return err
 }
 
-func (cs *checkoutService) shipOrder(ctx context.Context, address *pb.Address, items []*pb.CartItem) (string, error) {
+func (cs *checkoutService) shipOrder(ctx context.Context, address *pb.Address, items []*pb.CartItem) (*pb.ShipOrderResponse, error) {
 	resp, err := pb.NewShippingServiceClient(cs.shippingSvcConn).ShipOrder(ctx, &pb.ShipOrderRequest{
 		Address: address,
 		Items:   items})
 	if err != nil {
-		return "", fmt.Errorf("shipment failed: %+v", err)
+		return nil, fmt.Errorf("shipment failed: %+v", err)
 	}
-	return resp.GetTrackingId(), nil
+	return resp, nil
 }

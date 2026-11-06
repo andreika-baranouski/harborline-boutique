@@ -1,7 +1,13 @@
 package main
 
 import (
+	"context"
+	"net"
 	"testing"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 
 	pb "github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/genproto"
 	money "github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/money"
@@ -58,5 +64,87 @@ func TestComputeTotalsNonUSD(t *testing.T) {
 	// 18.393 - 1.84 + 8 = 24.553: only the discount is rounded.
 	if !money.AreEquals(total, eur(24, 553000000)) {
 		t.Errorf("total = %v, want 24.553 EUR", &total)
+	}
+}
+
+// fakeShipping answers ShipOrder with a fixed response.
+type fakeShipping struct {
+	pb.UnimplementedShippingServiceServer
+	resp *pb.ShipOrderResponse
+}
+
+func (f *fakeShipping) ShipOrder(ctx context.Context, in *pb.ShipOrderRequest) (*pb.ShipOrderResponse, error) {
+	return f.resp, nil
+}
+
+// dialFakeShipping serves fake over an in-memory listener and returns a client connection to it.
+func dialFakeShipping(t *testing.T, fake *fakeShipping) *grpc.ClientConn {
+	t.Helper()
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer()
+	pb.RegisterShippingServiceServer(srv, fake)
+	go srv.Serve(lis)
+	t.Cleanup(srv.Stop)
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) { return lis.DialContext(ctx) }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial fake shipping: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	return conn
+}
+
+// TestShipOrderReturnsEstimate checks that shipOrder keeps both the tracking id and the estimated delivery date.
+func TestShipOrderReturnsEstimate(t *testing.T) {
+	cs := &checkoutService{shippingSvcConn: dialFakeShipping(t, &fakeShipping{
+		resp: &pb.ShipOrderResponse{TrackingId: "AB-1-2", EstimatedDelivery: "2026-11-12"},
+	})}
+
+	got, err := cs.shipOrder(context.Background(), &pb.Address{Country: "US"}, nil)
+	if err != nil {
+		t.Fatalf("shipOrder failed: %v", err)
+	}
+	if got.GetTrackingId() != "AB-1-2" || got.GetEstimatedDelivery() != "2026-11-12" {
+		t.Errorf("shipOrder = {%q, %q}, want {AB-1-2, 2026-11-12}", got.GetTrackingId(), got.GetEstimatedDelivery())
+	}
+}
+
+// TestNewOrderResult checks that the shipment's tracking id and estimate are copied into the order unchanged,
+// next to the amount charged and the promo outcome.
+func TestNewOrderResult(t *testing.T) {
+	addr := &pb.Address{Country: "US"}
+	prep := orderPrep{
+		orderItems:            []*pb.OrderItem{{Item: &pb.CartItem{ProductId: "OLJCESPC7Z", Quantity: 1}}},
+		shippingCostLocalized: &pb.Money{CurrencyCode: "USD", Units: 8, Nanos: 990000000},
+	}
+	total := usd(26, 980000000)
+	promoRes := applied(10)
+
+	tests := []struct {
+		name     string
+		shipment *pb.ShipOrderResponse
+		want     string
+	}{
+		{"with estimate", &pb.ShipOrderResponse{TrackingId: "AB-1-2", EstimatedDelivery: "2026-11-12"}, "2026-11-12"},
+		{"without estimate", &pb.ShipOrderResponse{TrackingId: "AB-1-2"}, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := newOrderResult("o-1", tc.shipment, prep, addr, &total, promoRes)
+			if got.GetEstimatedDelivery() != tc.want {
+				t.Errorf("EstimatedDelivery = %q, want %q", got.GetEstimatedDelivery(), tc.want)
+			}
+			if got.GetShippingTrackingId() != "AB-1-2" {
+				t.Errorf("ShippingTrackingId = %q, want AB-1-2", got.GetShippingTrackingId())
+			}
+			if got.GetOrderId() != "o-1" || got.GetShippingAddress() != addr || got.GetShippingCost() != prep.shippingCostLocalized || len(got.GetItems()) != 1 {
+				t.Errorf("newOrderResult did not carry the order fields: %v", got)
+			}
+			if got.GetTotalPaid() != &total || got.GetPromo() != promoRes {
+				t.Errorf("newOrderResult did not carry TotalPaid/Promo: %v", got)
+			}
+		})
 	}
 }
