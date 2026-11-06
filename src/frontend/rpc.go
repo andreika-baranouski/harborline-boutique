@@ -97,6 +97,9 @@ func (fe *frontendServer) getShippingQuote(ctx context.Context, items []*pb.Cart
 }
 
 func (fe *frontendServer) getRecommendations(ctx context.Context, userID string, productIDs []string) ([]*pb.Product, error) {
+	if !fe.recommendationsEnabled {
+		return nil, nil // ENABLE_RECOMMENDATIONS is off: no call to recommendationservice
+	}
 	resp, err := pb.NewRecommendationServiceClient(fe.recommendationSvcConn).ListRecommendations(ctx,
 		&pb.ListRecommendationsRequest{UserId: userID, ProductIds: productIDs})
 	if err != nil {

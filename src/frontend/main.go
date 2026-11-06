@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/profiler"
@@ -70,8 +71,9 @@ type frontendServer struct {
 	cartSvcAddr string
 	cartSvcConn *grpc.ClientConn
 
-	recommendationSvcAddr string
-	recommendationSvcConn *grpc.ClientConn
+	recommendationSvcAddr  string
+	recommendationSvcConn  *grpc.ClientConn
+	recommendationsEnabled bool
 
 	checkoutSvcAddr string
 	checkoutSvcConn *grpc.ClientConn
@@ -122,6 +124,17 @@ func main() {
 		go initProfiling(log, "frontend", "1.0.0")
 	} else {
 		log.Info("Profiling disabled.")
+	}
+
+	recommendationsEnabled, ok := envFlagEnabled(os.Getenv("ENABLE_RECOMMENDATIONS"), true)
+	if !ok {
+		log.Warnf("ENABLE_RECOMMENDATIONS=%q not recognised, keeping recommendations enabled", os.Getenv("ENABLE_RECOMMENDATIONS"))
+	}
+	svc.recommendationsEnabled = recommendationsEnabled
+	if recommendationsEnabled {
+		log.Info("Recommendations enabled.")
+	} else {
+		log.Info("Recommendations disabled.")
 	}
 
 	srvPort := port
@@ -212,6 +225,21 @@ func initProfiling(log logrus.FieldLogger, service, version string) {
 		time.Sleep(d)
 	}
 	log.Warn("warning: could not initialize Stackdriver profiler after retrying, giving up")
+}
+
+// envFlagEnabled reports whether a boolean env flag is on. Empty means def;
+// unrecognised values also fall back to def (ok=false so the caller can warn).
+func envFlagEnabled(v string, def bool) (enabled bool, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "":
+		return def, true
+	case "1", "true", "on", "yes":
+		return true, true
+	case "0", "false", "off", "no":
+		return false, true
+	default:
+		return def, false
+	}
 }
 
 func mustMapEnv(target *string, envKey string) {
