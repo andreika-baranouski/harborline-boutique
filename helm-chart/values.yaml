@@ -123,6 +123,8 @@ frontend:
   name: frontend
   externalService: true
   cymbalBranding: false
+  # Show the promo code input on the cart page (codes are configured in checkoutService.promoCodes).
+  promoCodes: false
   # One of: local, gcp, aws, azure, onprem, alibaba. When not set, defaults to "local" unless running in GKE, otherwise auto-sets to gcp.
   platform: local
   singleSharedSession: false

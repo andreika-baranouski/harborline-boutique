@@ -126,6 +126,8 @@ spec:
           {{- end }}
           - name: CYMBAL_BRANDING
             value: {{ .Values.frontend.cymbalBranding | quote }}
+          - name: ENABLE_PROMO_CODES
+            value: {{ .Values.frontend.promoCodes | quote }}
           - name: ENABLE_ASSISTANT
             value: {{ .Values.shoppingAssistantService.create | quote }}
           - name: ENABLE_SINGLE_SHARED_SESSION
