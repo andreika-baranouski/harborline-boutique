@@ -116,6 +116,8 @@ message GetQuoteRequest {
 
 message GetQuoteResponse {
     Money cost_usd = 1;
+    // Estimated delivery date, ISO-8601 calendar date "YYYY-MM-DD" (UTC). Empty when unknown/disabled.
+    string estimated_delivery = 2;
 }
 
 message ShipOrderRequest {
@@ -125,6 +127,8 @@ message ShipOrderRequest {
 
 message ShipOrderResponse {
     string tracking_id = 1;
+    // Same format and rule as GetQuoteResponse.estimated_delivery.
+    string estimated_delivery = 2;
 }
 
 message Address {
@@ -215,6 +219,8 @@ message OrderResult {
     Money total_paid = 6;
     // Outcome of PlaceOrderRequest.promo_code. Absent when no code was sent.
     PromoResult promo = 7;
+    // Copied by checkout from ShipOrderResponse.estimated_delivery. Empty when unknown.
+    string   estimated_delivery = 8;
 }
 
 // Outcome of the promo code sent in PlaceOrderRequest.
