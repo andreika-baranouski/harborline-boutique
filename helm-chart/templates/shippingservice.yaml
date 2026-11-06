@@ -78,6 +78,8 @@ spec:
         - name: DISABLE_PROFILER
           value: "1"
         {{- end }}
+        - name: ENABLE_DELIVERY_ESTIMATE
+          value: {{ .Values.shippingService.deliveryEstimate | quote }}
         readinessProbe:
           periodSeconds: 5
           grpc:

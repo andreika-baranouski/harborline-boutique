@@ -197,6 +197,8 @@ recommendationService:
 shippingService:
   create: true
   name: shippingservice
+  # Shows an estimated delivery date in the order confirmation (ENABLE_DELIVERY_ESTIMATE).
+  deliveryEstimate: false
   resources:
     requests:
       cpu: 100m

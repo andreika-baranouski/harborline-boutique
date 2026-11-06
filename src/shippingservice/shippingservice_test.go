@@ -17,6 +17,7 @@ package main
 import (
 	"regexp"
 	"testing"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -273,5 +274,139 @@ func TestQuoteString(t *testing.T) {
 	expected := "$8.99"
 	if q.String() != expected {
 		t.Errorf("Quote.String() = '%s', want '%s'", q.String(), expected)
+	}
+}
+
+// shipDay returns a fixed UTC ship date for the delivery-estimate tests.
+func shipDay(y int, m time.Month, d int) time.Time {
+	return time.Date(y, m, d, 15, 30, 0, 0, time.UTC)
+}
+
+// estimateServer returns a server with delivery estimates enabled and a fixed clock.
+func estimateServer(now time.Time) *server {
+	return &server{estimatesEnabled: true, now: func() time.Time { return now }}
+}
+
+// TestEstimateDelivery covers the business-day rule: US 3 days, everywhere else 7, weekends skipped.
+func TestEstimateDelivery(t *testing.T) {
+	tests := []struct {
+		name    string
+		ship    time.Time
+		country string
+		want    string
+	}{
+		{"US Monday to Thursday", shipDay(2026, time.November, 9), "US", "2026-11-12"},
+		{"usa alias", shipDay(2026, time.November, 9), "usa", "2026-11-12"},
+		{"United States alias", shipDay(2026, time.November, 9), " United States ", "2026-11-12"},
+		{"non-US 7 business days", shipDay(2026, time.November, 9), "DE", "2026-11-18"},
+		{"unknown country uses default", shipDay(2026, time.November, 9), "", "2026-11-18"},
+		{"US Thursday skips weekend", shipDay(2026, time.November, 12), "US", "2026-11-17"},
+		{"US Saturday counts from Monday", shipDay(2026, time.November, 14), "US", "2026-11-18"},
+		{"US Sunday counts from Monday", shipDay(2026, time.November, 15), "US", "2026-11-18"},
+		{"US year boundary", shipDay(2026, time.December, 30), "US", "2027-01-04"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := EstimateDelivery(tc.ship, tc.country).Format(deliveryDateLayout)
+			if got != tc.want {
+				t.Errorf("EstimateDelivery(%s, %q) = %s, want %s", tc.ship.Format(time.RFC3339), tc.country, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestEstimateDeliveryUsesUTCDate checks that the ship date is the UTC calendar date of the clock.
+func TestEstimateDeliveryUsesUTCDate(t *testing.T) {
+	// Sunday 2026-11-08 20:00 in New York is already Monday 2026-11-09 in UTC.
+	ny := time.FixedZone("EST", -5*60*60)
+	got := EstimateDelivery(time.Date(2026, time.November, 8, 20, 0, 0, 0, ny), "US").Format(deliveryDateLayout)
+	if got != "2026-11-12" {
+		t.Errorf("EstimateDelivery = %s, want 2026-11-12", got)
+	}
+}
+
+// TestEstimateDeliveryTableDriven checks that a changed transitDays entry is used without code changes.
+func TestEstimateDeliveryTableDriven(t *testing.T) {
+	old := transitDays["US"]
+	t.Cleanup(func() { transitDays["US"] = old })
+	transitDays["US"] = 2
+
+	got := EstimateDelivery(shipDay(2026, time.November, 9), "US").Format(deliveryDateLayout)
+	if got != "2026-11-11" {
+		t.Errorf("EstimateDelivery with US=2 = %s, want 2026-11-11", got)
+	}
+}
+
+// TestGetQuoteEstimatedDelivery checks that GetQuote carries the estimate and leaves the cost unchanged.
+func TestGetQuoteEstimatedDelivery(t *testing.T) {
+	s := estimateServer(shipDay(2026, time.November, 9))
+	req := &pb.GetQuoteRequest{
+		Address: &pb.Address{Country: "US"},
+		Items:   []*pb.CartItem{{ProductId: "23", Quantity: 1}},
+	}
+
+	res, err := s.GetQuote(context.Background(), req)
+	if err != nil {
+		t.Fatalf("GetQuote failed: %v", err)
+	}
+	if res.CostUsd.GetUnits() != 8 || res.CostUsd.GetNanos() != 990000000 {
+		t.Errorf("GetQuote cost = %d.%d, want 8.990000000", res.CostUsd.GetUnits(), res.CostUsd.GetNanos())
+	}
+	if res.GetEstimatedDelivery() != "2026-11-12" {
+		t.Errorf("GetQuote estimated_delivery = %q, want 2026-11-12", res.GetEstimatedDelivery())
+	}
+}
+
+// TestGetQuoteEstimatedDeliveryNoAddress checks that the cart-page quote (no address) uses the default transit time.
+func TestGetQuoteEstimatedDeliveryNoAddress(t *testing.T) {
+	s := estimateServer(shipDay(2026, time.November, 9))
+	res, err := s.GetQuote(context.Background(), &pb.GetQuoteRequest{Items: []*pb.CartItem{{ProductId: "23", Quantity: 1}}})
+	if err != nil {
+		t.Fatalf("GetQuote failed: %v", err)
+	}
+	if res.GetEstimatedDelivery() != "2026-11-18" {
+		t.Errorf("GetQuote estimated_delivery = %q, want 2026-11-18", res.GetEstimatedDelivery())
+	}
+}
+
+// TestShipOrderEstimatedDelivery checks that ShipOrder returns both the tracking id and the estimate.
+func TestShipOrderEstimatedDelivery(t *testing.T) {
+	s := estimateServer(shipDay(2026, time.November, 9))
+	req := &pb.ShipOrderRequest{
+		Address: &pb.Address{StreetAddress: "1600 Amphitheatre Pkwy", City: "Mountain View", State: "CA", Country: "United States"},
+		Items:   []*pb.CartItem{{ProductId: "23", Quantity: 1}},
+	}
+
+	res, err := s.ShipOrder(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ShipOrder failed: %v", err)
+	}
+	if !regexp.MustCompile(`^[A-Z]{2}-\d+-\d+$`).MatchString(res.GetTrackingId()) {
+		t.Errorf("ShipOrder tracking_id = %q does not match the expected format", res.GetTrackingId())
+	}
+	if res.GetEstimatedDelivery() != "2026-11-12" {
+		t.Errorf("ShipOrder estimated_delivery = %q, want 2026-11-12", res.GetEstimatedDelivery())
+	}
+}
+
+// TestEstimateDisabled checks that both RPCs leave estimated_delivery empty when the flag is off.
+func TestEstimateDisabled(t *testing.T) {
+	s := &server{now: func() time.Time { return shipDay(2026, time.November, 9) }}
+	addr := &pb.Address{StreetAddress: "1 Main St", City: "Springfield", State: "IL", Country: "US"}
+	items := []*pb.CartItem{{ProductId: "23", Quantity: 1}}
+
+	quote, err := s.GetQuote(context.Background(), &pb.GetQuoteRequest{Address: addr, Items: items})
+	if err != nil {
+		t.Fatalf("GetQuote failed: %v", err)
+	}
+	if quote.GetEstimatedDelivery() != "" {
+		t.Errorf("GetQuote estimated_delivery = %q, want empty", quote.GetEstimatedDelivery())
+	}
+	ship, err := s.ShipOrder(context.Background(), &pb.ShipOrderRequest{Address: addr, Items: items})
+	if err != nil {
+		t.Fatalf("ShipOrder failed: %v", err)
+	}
+	if ship.GetEstimatedDelivery() != "" {
+		t.Errorf("ShipOrder estimated_delivery = %q, want empty", ship.GetEstimatedDelivery())
 	}
 }
