@@ -71,6 +71,8 @@ Here is the list of the variations available as Kustomize components that you co
 
 - [**Change to the Cymbal Shops Branding**](components/cymbal-branding)
   - Changes all Online Boutique-related branding to Google Cloud's fictitious company — Cymbal Shops. The code adds/enables an environment variable `CYMBAL_BRANDING` in the `frontend` service.
+- [**Enable promo codes at checkout**](components/promo-codes)
+  - Shows the promo code input on the cart page. The code adds/enables an environment variable `ENABLE_PROMO_CODES` in the `frontend` service; the code table is the `PROMO_CODES` variable of `checkoutservice`.
 - [**Integrate with Google Cloud Operations**](components/google-cloud-operations)
   - Enables Monitoring (Stats), Tracing, and Profiler for various services within Online Boutique. The code adds the appropriare environment variables (`ENABLE_STATS`, `ENABLE_TRACING`, `DISABLE_PROFILER`) for each YAML config file.
 - [**Integrate with Memorystore (Redis)**](components/memorystore)

@@ -84,6 +84,10 @@ cartService:
 checkoutService:
   create: true
   name: checkoutservice
+  # Promo code table as JSON, e.g.
+  # '[{"code":"WELCOME10","percent":10},{"code":"HARBOR25","percent":25,"end":"2026-12-31"}]'
+  # Empty = no discounts.
+  promoCodes: ""
   resources:
     requests:
       cpu: 100m
@@ -119,6 +123,8 @@ frontend:
   name: frontend
   externalService: true
   cymbalBranding: false
+  # Show the promo code input on the cart page (codes are configured in checkoutService.promoCodes).
+  promoCodes: false
   # One of: local, gcp, aws, azure, onprem, alibaba. When not set, defaults to "local" unless running in GKE, otherwise auto-sets to gcp.
   platform: local
   singleSharedSession: false

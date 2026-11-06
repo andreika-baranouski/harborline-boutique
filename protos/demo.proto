@@ -211,6 +211,25 @@ message OrderResult {
     Money shipping_cost = 3;
     Address  shipping_address = 4;
     repeated OrderItem items = 5;
+    // Amount actually charged: items subtotal - discount + shipping.
+    Money total_paid = 6;
+    // Outcome of PlaceOrderRequest.promo_code. Absent when no code was sent.
+    PromoResult promo = 7;
+}
+
+// Outcome of the promo code sent in PlaceOrderRequest.
+message PromoResult {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        APPLIED = 1;
+        UNKNOWN = 2;         // not in the table (or malformed)
+        EXPIRED = 3;         // now is after the end of the validity window
+        NOT_YET_ACTIVE = 4;  // now is before the start of the validity window
+    }
+    string code = 1;         // normalised (trimmed, upper-case)
+    Status status = 2;
+    uint32 percent = 3;      // set when APPLIED
+    Money discount = 4;      // positive amount in user_currency; set when APPLIED
 }
 
 message SendOrderConfirmationRequest {
@@ -232,6 +251,8 @@ message PlaceOrderRequest {
     Address address = 3;
     string email = 5;
     CreditCardInfo credit_card = 6;
+    // Optional promo code as typed by the customer. Empty = no code.
+    string promo_code = 7;
 }
 
 message PlaceOrderResponse {

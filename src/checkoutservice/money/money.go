@@ -16,6 +16,7 @@ package money
 
 import (
 	"errors"
+	"math/big"
 
 	pb "github.com/GoogleCloudPlatform/microservices-demo/src/checkoutservice/genproto"
 )
@@ -129,4 +130,41 @@ func MultiplySlow(m pb.Money, n uint32) pb.Money {
 		n--
 	}
 	return out
+}
+
+// minorUnitStep is the size of the currency's minor unit in nanos, for the
+// currencies that do not have the default of 2 decimals.
+var minorUnitStep = map[string]int64{
+	"JPY": nanosMod, // 0 decimals
+	"KRW": nanosMod,
+	"ISK": nanosMod,
+}
+
+const defaultMinorUnitStep = nanosMod / 100 // 2 decimals
+
+// PercentOf returns pct percent of m, rounded half-up (away from zero) to the
+// minor unit of m's currency. The computation is done on integer nanos without
+// floating point. The currency code of m is kept.
+func PercentOf(m pb.Money, pct uint32) pb.Money {
+	step, ok := minorUnitStep[m.GetCurrencyCode()]
+	if !ok {
+		step = defaultMinorUnitStep
+	}
+	nanos := new(big.Int).Mul(big.NewInt(m.GetUnits()), big.NewInt(nanosMod))
+	nanos.Add(nanos, big.NewInt(int64(m.GetNanos())))
+	nanos.Mul(nanos, big.NewInt(int64(pct)))
+
+	// Number of minor units = nanos / (100 * step), rounded half-up.
+	den := big.NewInt(100 * step)
+	q, r := new(big.Int).QuoRem(nanos, den, new(big.Int))
+	if new(big.Int).Mul(new(big.Int).Abs(r), big.NewInt(2)).Cmp(den) >= 0 {
+		q.Add(q, big.NewInt(int64(nanos.Sign())))
+	}
+	q.Mul(q, big.NewInt(step))
+
+	units, rem := new(big.Int).QuoRem(q, big.NewInt(nanosMod), new(big.Int))
+	return pb.Money{
+		Units:        units.Int64(),
+		Nanos:        int32(rem.Int64()),
+		CurrencyCode: m.GetCurrencyCode()}
 }

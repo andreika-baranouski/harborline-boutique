@@ -95,11 +95,40 @@
                         <div class="col pr-md-0 text-right">{{ renderMoney .total_cost }}</div>
                     </div>
 
+                    {{ if $.promo_enabled }}
+                    <div class="row cart-summary-promo-row">
+                        <div class="col pl-md-0 pr-md-0 cymbal-form-field">
+                            <label for="promo_code">Promo code</label>
+                            <div class="d-flex">
+                                <input type="text" id="promo_code" name="promo_code" form="checkout-form"
+                                    maxlength="32" pattern="[A-Za-z0-9]*" autocomplete="off"
+                                    title="Letters and digits only">
+                                <button type="button" id="apply_promo_code" class="cymbal-button-secondary ml-2">Apply</button>
+                            </div>
+                            <small id="promo_code_hint" aria-live="polite"></small>
+                        </div>
+                    </div>
+                    <script>
+                        document.getElementById('apply_promo_code').addEventListener('click', function () {
+                            var input = document.getElementById('promo_code');
+                            var hint = document.getElementById('promo_code_hint');
+                            input.value = input.value.trim().toUpperCase();
+                            if (input.value === '') {
+                                hint.textContent = '';
+                            } else if (!input.checkValidity()) {
+                                hint.textContent = 'A promo code has letters and digits only.';
+                            } else {
+                                hint.textContent = 'Code ' + input.value + ' will be applied when you place the order.';
+                            }
+                        });
+                    </script>
+                    {{ end }}
+
                 </div>
 
                 <div class="col-lg-5 offset-lg-1 col-xl-4">
 
-                    <form class="cart-checkout-form" action="{{ $.baseUrl }}/cart/checkout" method="POST">
+                    <form id="checkout-form" class="cart-checkout-form" action="{{ $.baseUrl }}/cart/checkout" method="POST">
 
                         <div class="row">
                             <div class="col">

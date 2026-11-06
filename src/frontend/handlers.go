@@ -54,6 +54,10 @@ var (
 	plat platformDetails
 )
 
+// promoCodesEnabled shows the promo code input on the cart page and passes the
+// posted code to checkout. Off by default.
+var promoCodesEnabled = "true" == strings.ToLower(os.Getenv("ENABLE_PROMO_CODES"))
+
 var validEnvs = []string{"local", "gcp", "azure", "aws", "onprem", "alibaba"}
 
 func (fe *frontendServer) homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -310,6 +314,7 @@ func (fe *frontendServer) viewCartHandler(w http.ResponseWriter, r *http.Request
 		"shipping_cost":    shippingCost,
 		"show_currency":    true,
 		"total_cost":       totalPrice,
+		"promo_enabled":    promoCodesEnabled,
 		"items":            items,
 		"expiration_years": []int{year, year + 1, year + 2, year + 3, year + 4},
 	})); err != nil {
@@ -332,6 +337,7 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 		ccMonth, _    = strconv.ParseInt(r.FormValue("credit_card_expiration_month"), 10, 32)
 		ccYear, _     = strconv.ParseInt(r.FormValue("credit_card_expiration_year"), 10, 32)
 		ccCVV, _      = strconv.ParseInt(r.FormValue("credit_card_cvv"), 10, 32)
+		promoCode     = promoCodeFromForm(r, promoCodesEnabled)
 	)
 
 	payload := validator.PlaceOrderPayload{
@@ -345,6 +351,7 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 		CcMonth:       ccMonth,
 		CcYear:        ccYear,
 		CcCVV:         ccCVV,
+		PromoCode:     promoCode,
 	}
 	if err := payload.Validate(); err != nil {
 		renderHTTPError(log, r, w, validator.ValidationErrorResponse(err), http.StatusUnprocessableEntity)
@@ -367,6 +374,7 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 				State:         payload.State,
 				ZipCode:       int32(payload.ZipCode),
 				Country:       payload.Country},
+			PromoCode: payload.PromoCode,
 		})
 	if err != nil {
 		renderHTTPError(log, r, w, errors.Wrap(err, "failed to complete the order"), http.StatusInternalServerError)
@@ -377,11 +385,7 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 	order.GetOrder().GetItems()
 	recommendations, _ := fe.getRecommendations(r.Context(), sessionID(r), nil)
 
-	totalPaid := *order.GetOrder().GetShippingCost()
-	for _, v := range order.GetOrder().GetItems() {
-		multPrice := money.MultiplySlow(*v.GetCost(), uint32(v.GetItem().GetQuantity()))
-		totalPaid = money.Must(money.Sum(totalPaid, multPrice))
-	}
+	totalPaid := orderTotalPaid(order.GetOrder())
 
 	currencies, err := fe.getCurrencies(r.Context())
 	if err != nil {
@@ -394,10 +398,35 @@ func (fe *frontendServer) placeOrderHandler(w http.ResponseWriter, r *http.Reque
 		"currencies":      currencies,
 		"order":           order.GetOrder(),
 		"total_paid":      &totalPaid,
+		"promo":           order.GetOrder().GetPromo(),
 		"recommendations": recommendations,
 	})); err != nil {
 		log.Println(err)
 	}
+}
+
+// promoCodeFromForm returns the posted promo code, trimmed and upper-cased, or
+// "" when promo codes are disabled.
+func promoCodeFromForm(r *http.Request, enabled bool) string {
+	if !enabled {
+		return ""
+	}
+	return strings.ToUpper(strings.TrimSpace(r.FormValue("promo_code")))
+}
+
+// orderTotalPaid returns the amount checkout charged. A checkoutservice that
+// predates total_paid leaves it unset; then the total is computed from the
+// items and shipping as before.
+func orderTotalPaid(order *pb.OrderResult) pb.Money {
+	if order.GetTotalPaid() != nil {
+		return *order.GetTotalPaid()
+	}
+	totalPaid := *order.GetShippingCost()
+	for _, v := range order.GetItems() {
+		multPrice := money.MultiplySlow(*v.GetCost(), uint32(v.GetItem().GetQuantity()))
+		totalPaid = money.Must(money.Sum(totalPaid, multPrice))
+	}
+	return totalPaid
 }
 
 func (fe *frontendServer) assistantHandler(w http.ResponseWriter, r *http.Request) {

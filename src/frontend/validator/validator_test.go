@@ -183,3 +183,38 @@ func TestSetCurrencyFailsValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestPlaceOrderPromoCodeValidation(t *testing.T) {
+	tests := []struct {
+		name      string
+		promoCode string
+		wantValid bool
+	}{
+		{"no promo code", "", true},
+		{"valid promo code", "WELCOME10", true},
+		{"32 characters", strings.Repeat("A", 32), true},
+		{"33 characters", strings.Repeat("A", 33), false},
+		{"spaces and punctuation", "WEL COME!", false},
+		{"dash", "WEL-COME10", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload := PlaceOrderPayload{
+				Email:         "test@example.com",
+				StreetAddress: "12345 example street",
+				ZipCode:       10004,
+				City:          "New York",
+				State:         "New York",
+				Country:       "United States",
+				CcNumber:      "5272940000751666",
+				CcMonth:       4,
+				CcYear:        2024,
+				CcCVV:         584,
+				PromoCode:     tt.promoCode,
+			}
+			if err := payload.Validate(); (err == nil) != tt.wantValid {
+				t.Errorf("Validate() with promo code %q = %v, want valid=%v", tt.promoCode, err, tt.wantValid)
+			}
+		})
+	}
+}

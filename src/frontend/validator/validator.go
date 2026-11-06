@@ -50,6 +50,7 @@ type PlaceOrderPayload struct {
 	CcMonth       int64  `validate:"required,gte=1,lte=12"`
 	CcYear        int64  `validate:"required"`
 	CcCVV         int64  `validate:"required"`
+	PromoCode     string `validate:"omitempty,max=32,alphanum"`
 }
 
 type SetCurrencyPayload struct {
