@@ -128,6 +128,8 @@ frontend:
   # One of: local, gcp, aws, azure, onprem, alibaba. When not set, defaults to "local" unless running in GKE, otherwise auto-sets to gcp.
   platform: local
   singleSharedSession: false
+  # Set to false to hide the "You may also like" strip and stop calls to recommendationservice.
+  recommendations: true
   virtualService:
     create: false
     hosts:

@@ -132,6 +132,8 @@ spec:
             value: {{ .Values.shoppingAssistantService.create | quote }}
           - name: ENABLE_SINGLE_SHARED_SESSION
             value: {{ .Values.frontend.singleSharedSession | quote }}
+          - name: ENABLE_RECOMMENDATIONS
+            value: {{ .Values.frontend.recommendations | quote }}
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
 ---
